@@ -1,0 +1,6 @@
+[submodule "ifttt-webhook"]
+	path = ifttt-webhook
+	url = https://github.com/spilliams/ifttt-webhook.git
+[submodule "ifwtw"]
+	path = ifwtw
+	url = https://github.com/spilliams/ifwtw.git
