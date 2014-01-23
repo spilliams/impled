@@ -1,7 +1,7 @@
 // attempt at being able to interrupt looping commands
 interrupt <- false;
 ready <- true;
-dTime <- 0.01; // seconds
+dTime <- 0.005; // seconds
 
 //////////////////////
 // HELPER FUNCTIONS //
@@ -44,86 +44,44 @@ function staticRGB(rgb) {
     hardware.spi257.write(rgb);
 }
 
-function ombre(data) {
-    waitUntilReady();
+function cycle(data) {
+    // waitUntilReady();
     
-    server.log("rgb1: ["+data.red1+","+data.green1+","+data.blue1+"]\nrgb2: ["+data.red2+","+data.green2+","+data.blue2+"]\nt1: "+data.t1+"\nt2: "+data.t2+"\ntT: "+data.tT );
+    local tColor = data.tColor.tofloat();
+    local tTransit = data.tTransit.tofloat();
     
     local time = 0;
-    local totalTime = data.t1 + data.tT + data.t2 + data.tT;
-    
-    local loggedT1 = false;
-    local loggedTt1 = false;
-    local loggedT2 = false;
-    local loggedTt2 = false;
+    local totalTime = data.colors.len() * (data.tColor + data.tTransit);
+    local previousColorIndex = 0;
     
     while (!interrupt) {
         ready = false;
         
-        if (time < data.t1) {
-            
-            // color 1 for t1 seconds
-            
-            if (!loggedT1) {
-                server.log("t1. interrupt: "+interrupt);
-                loggedT1 = true;
-                loggedTt1 = false;
-                loggedT2 = false;
-                loggedTt2 = false;
-            }
-            hardware.spi257.write(integer2rgb(data.red1, data.green1, data.blue1));
-        } else if (time < (data.t1+data.tT)) {
-            
-            // blend (1->2) for tT seconds
-            
-            if (!loggedTt1) {
-                server.log("tT 1. interrupt: "+interrupt);
-                loggedTt1 = true;
-                loggedT1 = false;
-                loggedT2 = false;
-                loggedTt2 = false;
-            }
-            
-            local timePercent = (time-data.t1)/data.tT;
-            // blend colors 1 and 2
-            local blendRed   = ((data.red2   - data.red1)   * timePercent) + data.red1;
-            local blendGreen = ((data.green2 - data.green1) * timePercent) + data.green1;
-            local blendBlue  = ((data.blue2  - data.blue1)  * timePercent) + data.blue1;
-            
-            hardware.spi257.write(integer2rgb(blendRed, blendGreen, blendBlue));
-        } else if (time < (data.t1 + data.tT + data.t2)) {
-            
-            // color 2 for t2 seconds
-            
-            if (!loggedT2) {
-                server.log("t2. interrupt: "+interrupt);
-                loggedT2 = true;
-                loggedT1 = false;
-                loggedTt1 = false;
-                loggedTt2 = false;
-            }
-            
-            hardware.spi257.write(integer2rgb(data.red2, data.green2, data.blue2));
+        local rgb;
+        
+        // figure out where in the cycle we are.
+        // start by determining how many colors we've completed
+        local startColorIndex = (time / (data.tColor + data.tTransit)).tointeger();
+        local colorCompletion = (time.tofloat() - startColorIndex * (tColor + tTransit)).tofloat();
+        
+        if (colorCompletion < tColor) {
+            local colorData = data.colors[startColorIndex];
+            rgb = integer2rgb(colorData.red, colorData.green, colorData.blue);
         } else {
+            local percentCompletion = ((colorCompletion - tColor) / tTransit).tofloat();
+            local leftColor = data.colors[startColorIndex];
+            local rightColorIndex = startColorIndex + 1;
+            if (rightColorIndex >= data.colors.len()) rightColorIndex = 0;
+            local rightColor = data.colors[rightColorIndex];
             
-            // blend (2->1) for tT seconds
+            local blendR = (rightColor.r - leftColor.r) * percentCompletion + leftColor.r;
+            local blendG = (rightColor.g - leftColor.g) * percentCompletion + leftColor.g;
+            local blendB = (rightColor.b - leftColor.b) * percentCompletion + leftColor.b;
             
-            if (!loggedTt2) {
-                server.log("tT 2. interrupt: "+interrupt);
-                loggedTt2 = true;
-                loggedT1 = false;
-                loggedTt1 = false;
-                loggedT2 = false;
-            }
-            
-            local timePercent2 = (time - data.t1 - data.tT - data.t2) / data.tT;
-            
-            local blendRed2   = data.red2   - ((data.red2   - data.red1)   * timePercent2);
-            local blendGreen2 = data.green2 - ((data.green2 - data.green1) * timePercent2);
-            local blendBlue2  = data.blue2  - ((data.blue2  - data.blue1)  * timePercent2);
-            
-            hardware.spi257.write(integer2rgb(blendRed2, blendGreen2, blendBlue2));
+            rgb = integer2rgb(blendR, blendG, blendB);
         }
+        
+        hardware.spi257.write(rgb);
         
         imp.sleep(dTime);
         time += dTime;
@@ -132,6 +90,8 @@ function ombre(data) {
         if (time > totalTime) {
             time = 0;
         }
+        
+        previousColorIndex = startColorIndex;
     }
     
     ready = true;
@@ -159,4 +119,4 @@ imp.sleep(0.5);
 hardware.spi257.write(integer2rgb(0,0,0));
 
 agent.on("rgb", staticRGB);
-agent.on("ombre", ombre);
+agent.on("cycle", cycle);
