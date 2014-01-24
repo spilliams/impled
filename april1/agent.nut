@@ -11,8 +11,7 @@ function hex2rgb(hexString) {
     rgb.writen(blueInt, 'b');
     return rgb;
 }
-function hex2integer(hex)
-{
+function hex2integer(hex) {
     local result = 0;
     local shift = hex.len() * 4;
  
@@ -51,7 +50,6 @@ function splitString(string, split) {
 }
 
 function requestHandler(request, response) {
-    
     server.log(request.path);
     try {
         if ("/static" == request.path) {
@@ -97,6 +95,9 @@ function requestHandler(request, response) {
             device.send("cycle", data);
             
             
+        } else if ("/sleep" == request.path) {
+            // the imp shall stop executing code
+            imp.sleep(0.005); // 5 ms
         } else {
             
             
