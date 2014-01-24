@@ -1,6 +1,3 @@
-// attempt at being able to interrupt looping commands
-interrupt <- false;
-ready <- true;
 dTime <- 0.005; // seconds
 
 //////////////////////
@@ -15,38 +12,16 @@ function integer2rgb(red, green, blue) {
     return rgb;
 }
 
-function waitUntilReady() {
-    if (ready) {
-        server.log("already ready. not interrupting");
-        return;
-    }
-    
-    server.log("waiting until ready. interrupting...");
-    interrupt = true;
-    // the currently-running loop should catch this on the next loop
-    // and when its loop exits set ready[0] to 1;
-    while (!ready) {
-        imp.sleep(0.01);
-    }
-    server.log("imp ready. ending interrupt");
-    // ok, nothing running, imp is ready, so stop interrupting
-    interrupt = false;
-}
-
 ///////////////////////////
 // LED COMMAND FUNCTIONS //
 ///////////////////////////
 
 function staticRGB(rgb) {
-    waitUntilReady();
-    
     server.log("Static RGB: "+rgb);
     hardware.spi257.write(rgb);
 }
 
 function cycle(data) {
-    // waitUntilReady();
-    
     local tColor = data.tColor.tofloat();
     local tTransit = data.tTransit.tofloat();
     
@@ -54,9 +29,7 @@ function cycle(data) {
     local totalTime = data.colors.len() * (data.tColor + data.tTransit);
     local previousColorIndex = 0;
     
-    while (!interrupt) {
-        ready = false;
-        
+    while (true) {
         local rgb;
         
         // figure out where in the cycle we are.
@@ -93,8 +66,6 @@ function cycle(data) {
         
         previousColorIndex = startColorIndex;
     }
-    
-    ready = true;
 }
 
 ///////////
