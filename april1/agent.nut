@@ -49,35 +49,29 @@ function splitString(string, split) {
     return arr;
 }
 
-
-/** LED Program table
- * restart: a boolean flag to tell the device to restart the program
- * frames: an array of rgb values (3-byte blobs)
- * cursor: an integer telling the device which frame to display
- * sleep: a float telling the device how long each frame lasts
- */
-
 function requestHandler(request, response) {
     server.log(request.path);
-    local lp = server.load();
-    server.log("lp is "+lp.len().tostring() + " long.");
     try {
-        if ("/reset" == request.path) { 
-            server.save({restart = false, frames = [], cursor = 0, sleep = 1});
-        } else if ("/one" == request.path) {
-            lp.restart = true;
-            lp.frames = [hex2rgb("550000"), hex2rgb("555555")];
-            server.save(lp);
-        } else if ("/two" == request.path) {
-            lp.restart = true;
-            lp.frames = [hex2rb("005500"), hex2rgb("555555")];
-            server.save(lp);
-        } else if ("/static" == request.path) {
-            response.send(404, "not implemented");
+        if ("/static" == request.path) {
+            
+            
+            local rgb = blob(3);
+            if ("red" in request.query && "green" in request.query && "blue" in request.query) {
+                rgb.writen(request.query.red.tointeger(), 'b');
+                rgb.writen(request.query.green.tointeger(), 'b');
+                rgb.writen(request.query.blue.tointeger(), 'b');
+            } else if ("hex" in request.query) {
+                rgb = hex2rgb(request.query.hex);
+            } else {
+                response.send(404, "usage: red=0&green=0&blue=0 or hex=FFFFFF");
+            }
+            device.send("rgb", rgb);
+            
+            
         } else if ("/cycle" == request.path) {
             
             
-            local data = {interrupt=true, command="cycle", colors=[], tColor=0, tTransit=0};
+            local data = {colors=[], tColor=0, tTransit=0};
             
             if ("hexes" in request.query && "tColor" in request.query && "tTransit" in request.query) {
                 server.log("hexes: "+ request.query.hexes);
@@ -94,17 +88,22 @@ function requestHandler(request, response) {
                 }
                 data.tColor = request.query.tColor.tofloat();
                 data.tTransit = request.query.tTransit.tofloat();
-                
-                lp = data;
-                server.save(lp);
             } else {
                 response.send(404, "usage: hexes=[FFFFFF,FFFFFF]&tColor=0&tTransit=60 (all times in seconds)");
             }
+            
+            device.send("cycle", data);
+            
+            
         } else if ("/sleep" == request.path) {
             // the imp shall stop executing code
             imp.sleep(0.005); // 5 ms
         } else {
+            
+            
             response.send(404, "Not Found");
+            
+            
         }
         // send a response back saying everything was OK.
         response.send(200, "OK");
@@ -112,6 +111,6 @@ function requestHandler(request, response) {
         response.send(500, "Internal Server Error: " + ex);
     }
 }
-
+ 
 // register the HTTP handler
 http.onrequest(requestHandler);
