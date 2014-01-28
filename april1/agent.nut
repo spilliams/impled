@@ -65,7 +65,7 @@ function requestHandler(request, response) {
             } else {
                 response.send(404, "usage: red=0&green=0&blue=0 or hex=FFFFFF");
             }
-            device.send("rgb", rgb);
+            device.send("static", rgb);
             
             
         } else if ("/cycle" == request.path) {

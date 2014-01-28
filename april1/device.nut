@@ -1,9 +1,19 @@
-dTime <- 0.005; // seconds
-
 //////////////////////
 // HELPER FUNCTIONS //
 //////////////////////
 
+function emptyCommand() {
+  return makeCommand("none",     [],      0,    true,         0, false);
+}
+function makeCommand(command, rgbs, sleep, restart, index, loop) {
+  return {command=command,
+    rgbs=rgbs,
+    sleep=sleep,
+    restart=restart,
+    index=index,
+    loop=loop
+  }
+}
 function integer2rgb(red, green, blue) {
     local rgb = blob(3);
     rgb.writen(red, 'b');
@@ -12,13 +22,52 @@ function integer2rgb(red, green, blue) {
     return rgb;
 }
 
-///////////////////////////
-// LED COMMAND FUNCTIONS //
-///////////////////////////
+///////////////////////
+// COMMAND ITERATION //
+///////////////////////
 
-function staticRGB(rgb) {
-    server.log("Static RGB: "+rgb);
-    hardware.spi257.write(rgb);
+function iterate() {
+    if (!iterating) server.log("starting iteration");
+    
+    if (command.restart) {
+        command.index = 0;
+        command.restart = false;
+    }
+    
+    hardware.spi257.write(command.rgbs[command.index]);
+
+    local newIndex = command.index + 1;
+    local keepGoing = true;
+    
+    if (newIndex >= command.rgbs.len()) {
+        if (command.loop) {
+            server.log("looping");
+            newIndex = 0;
+        } else {
+            keepGoing = false;
+        }
+    }
+    
+    if (keepGoing) {
+        iterating = true;
+        command.index = newIndex;
+        local sleep = command.sleep;
+        if (sleep < minSleep) sleep = minSleep;
+        if (sleep > maxSleep) sleep = maxSleep;
+        imp.wakeup(sleep, iterate);
+    } else {
+        server.log("ending iteration (new index was "+newIndex.tostring()+", rgbs length was "+command.rgbs.len().tostring()+", and loop was "+command.loop.tostring()+")");
+    }
+}
+
+//////////////////////
+// COMMAND CREATION //
+//////////////////////
+
+function staticRGB(data) {
+    command = makeCommand("static", [data], 0, true, 0, false);
+    
+    if (!iterating) iterate();
 }
 
 function cycle(data) {
@@ -27,9 +76,9 @@ function cycle(data) {
     
     local time = 0;
     local totalTime = data.colors.len() * (data.tColor + data.tTransit);
-    local previousColorIndex = 0;
     
-    while (true) {
+    local rgbs = [];
+    while (time < totalTime) {
         local rgb;
         
         // figure out where in the cycle we are.
@@ -54,23 +103,29 @@ function cycle(data) {
             rgb = integer2rgb(blendR, blendG, blendB);
         }
         
-        hardware.spi257.write(rgb);
+        rgbs.append(rgb);
         
         imp.sleep(dTime);
         time += dTime;
-        
-        // rollover
-        if (time > totalTime) {
-            time = 0;
-        }
-        
-        previousColorIndex = startColorIndex;
+    }
+    command = makeCommand("cycle", rgbs, dTime, true, 0, true);
+    
+    if (!iterating) {
+        iterate();
     }
 }
 
 ///////////
 // INIT! //
 ///////////
+
+// manually make sure that dTime is between minSleep and maxSleep
+// manually make sure minSleep < maxSleep
+dTime <- 0.005;    // seconds
+minSleep <- 0.001; // seconds
+maxSleep <- 0.1;   // seconds
+command <- emptyCommand();
+iterating <- false;
 
 server.log("spi config start");
 hardware.spi257.configure(SIMPLEX_TX, 15000); // Datasheet says max 25MHz
@@ -89,5 +144,5 @@ hardware.spi257.write(integer2rgb(0,0,255));
 imp.sleep(0.5);
 hardware.spi257.write(integer2rgb(0,0,0));
 
-agent.on("rgb", staticRGB);
+agent.on("static", staticRGB);
 agent.on("cycle", cycle);
